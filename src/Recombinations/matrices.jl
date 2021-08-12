@@ -272,7 +272,7 @@ num_recombined(::UniformScaling) = (0, 0)
 @inline function which_recombine_block(A::RecombineMatrix, j)
     @boundscheck checkbounds(A, :, j)
     M = A.M
-    nl, nr = num_recombined(A)  # left/right number of recombined bases
+    nl, nr = num_recombined(A)  # left/right number of recombined basis functions
     j <= nl && return 1
     j > M - nr && return 3
     2

@@ -26,7 +26,7 @@ Base.IndexStyle(::Type{<:AugmentedKnots}) = IndexLinear()
 
 # Custom definition of searchsortedlast, for sligthly faster determination of
 # the knot interval corresponding to a given point `x` (used when evaluating
-# splines; see `Splines.knot_interval`).
+# splines; see `knot_interval`).
 # TODO does this actually improve performance??
 function Base.searchsortedlast(t::AugmentedKnots, x; kws...)
     ξ = breakpoints(t)
@@ -107,4 +107,22 @@ function multiplicity(knots::AbstractVector, i)
     end
 
     m
+end
+
+function knot_interval(t::AbstractVector, x)
+    n = searchsortedlast(t, x)  # t[n] <= x < t[n + 1]
+    n == 0 && return nothing    # x < t[1]
+
+    Nt = length(t)
+
+    if n == Nt  # i.e. if x >= t[end]
+        t_last = t[n]
+        x > t_last && return nothing
+        # If x is exactly on the last knot, decrease the index as necessary.
+        while t[n] == t_last
+            n -= one(n)
+        end
+    end
+
+    n
 end

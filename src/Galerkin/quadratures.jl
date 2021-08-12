@@ -64,7 +64,7 @@ Broadcast.broadcastable(M::QuadratureMetric) = Ref(M)
 # smaller near the boundaries (this is not significant if knots are "augmented",
 # as is the default).
 # TODO implement evaluation of all B-splines at once (should be much faster...)
-function eval_basis_functions(B, is, xs, args...)
+function eval_basis_functions(B, is, xs, deriv)
     k = order(B)
     @assert length(is) ≤ k
     ntuple(Val(k)) do n
@@ -74,7 +74,46 @@ function eval_basis_functions(B, is, xs, args...)
         # for type stability concerns. These values are never used.
         i = n > length(is) ? is[1] : is[n]
         map(xs) do x
-            B[i](x, args...)
+            B[i](x, deriv)
         end
+    end
+end
+
+# TODO
+# - Extend this to derivatives!
+# - Try to avoid data transposition...
+# - Avoid computing and passing `is` in the calling functions.
+#   Instead, this function should return the `js`.
+function eval_basis_functions(B, is, xs, ::Derivative{0})
+    Nx = length(xs)
+
+    bs_x = ntuple(Val(Nx)) do ℓ
+        js, bs = BSplines.evaluate_all(B, xs[ℓ], Float64)
+        if is === js  # this is always the case for non-recombined bases
+            bs
+        else
+            # Make sure that bs[1] corresponds to is[1]
+            @assert is ⊆ js
+            δi = 1 - searchsortedlast(js, is[1])
+            _circshift(bs, δi)
+        end
+    end
+
+    # "Transpose" data
+    k = order(B)
+    @assert all(bs -> length(bs) == k, bs_x)
+    ntuple(Val(k)) do n
+        ntuple(Val(Nx)) do ℓ
+            bs_x[ℓ][n]
+        end
+    end
+end
+
+# This is equivalent to Base.circshift for AbstractVector's.
+function _circshift(vs::NTuple, shift)
+    N = length(vs)
+    ntuple(Val(N)) do i
+        j = mod1(i - shift, N)
+        @inbounds vs[j]
     end
 end

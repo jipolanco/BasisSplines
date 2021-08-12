@@ -276,21 +276,3 @@ function _integral(::BSplineBasis, S::Spline)
     B = BSplineBasis(BSplineOrder(k + 1), t_int; augment = Val(false))
     Spline(B, β)
 end
-
-function knot_interval(t::AbstractVector, x)
-    n = searchsortedlast(t, x)  # t[n] <= x < t[n + 1]
-    n == 0 && return nothing    # x < t[1]
-
-    Nt = length(t)
-
-    if n == Nt  # i.e. if x >= t[end]
-        t_last = t[n]
-        x > t_last && return nothing
-        # If x is exactly on the last knot, decrease the index as necessary.
-        while t[n] == t_last
-            n -= one(n)
-        end
-    end
-
-    n
-end

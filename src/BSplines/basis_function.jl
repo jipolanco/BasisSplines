@@ -1,3 +1,6 @@
+using StaticArrays
+using Base.Cartesian
+
 """
     BasisFunction{B <: AbstractBSplineBasis, T}
 
@@ -232,6 +235,64 @@ function _evaluate(::BSplineOrder{k}, t::AbstractVector, i::Integer,
     end
 
     y :: T
+end
+
+function evaluate_all(B::BSplineBasis, x, ::Type{T}) where {T}
+    i = knot_interval(knots(B), x)
+    k = order(B)
+    if i === nothing
+        is = 0:-1
+        bs = ntuple(_ -> zero(T), Val(k))
+    else
+        is = nonzero_in_segment(B, i)
+        bs = _evaluate_all(BSplineOrder(k), knots(B), i, x, T)
+    end
+    is, bs
+end
+
+# Directly adapted from de Boor (p. 111: The subroutine BSPLVB)
+function _evaluate_all(
+        ::BSplineOrder{k}, ts, i, x, ::Type{T},
+    ) where {k, T}
+    # The generated version can be slightly faster than the one using MVectors.
+    if @generated
+        km = k - 1
+        quote
+            @nexprs $k j -> b_j = zero(T)
+            b_1 = one(T)
+            @nexprs $km j -> begin
+                δr_j::T = @inbounds ts[i + j] - x
+                δl_j::T = @inbounds x - ts[i + 1 - j]
+                saved = zero(T)
+                @nexprs $km r -> begin
+                    if r ≤ j
+                        term = b_r / (δr_r + δl_{j + 1 - r})
+                        b_r = saved + δr_r * term
+                        saved = δl_{j + 1 - r} * term
+                    end
+                end
+                b_{j + 1} = saved
+            end
+            @ntuple $k b  # return (b_1, b_2, ..., b_k)
+        end
+    else
+        bs = MVector{k, T}(undef)
+        δr = MVector{k - 1, T}(undef)
+        δl = similar(δr)
+        bs[1] = 1
+        @inbounds for j = 1:(k - 1)
+            δr[j] = ts[i + j] - x
+            δl[j] = x - ts[i + 1 - j]
+            saved = zero(T)
+            for r = 1:j
+                term = bs[r] / (δr[r] + δl[j + 1 - r])
+                bs[r] = saved + δr[r] * term
+                saved = δl[j + 1 - r] * term
+            end
+            bs[j + 1] = saved
+        end
+        Tuple(bs)
+    end
 end
 
 # In principle, the support of a B-spline is [ta, tb[.

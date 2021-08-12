@@ -361,3 +361,45 @@ end
 
     ϕ::T
 end
+
+@propagate_inbounds function BSplines.evaluate_all(
+        R::RecombinedBSplineBasis, x, ::Type{T},
+    ) where {T}
+    B = parent(R)
+    k = order(B)
+    is, bs = BSplines.evaluate_all(B, x, T)
+    A = recombination_matrix(R)
+
+    cl, cr = num_constraints(A)
+    nl, nr = num_recombined(A)
+    M = size(A, 2)
+
+    js = is .- cl  # possible range of output ϕ_j's
+
+    # If we're outside of the recombination blocks, simply return (js, bs).
+    if js[begin] > 0 && js[end] ≤ M
+        lblock = which_recombine_block(A, js[begin])
+        rblock = which_recombine_block(A, js[end])
+        if lblock == rblock == 2
+            return js, bs
+        end
+    end
+
+    ϕs = @MVector zeros(T, k)
+    δi = is[1] - 1
+    for l = 1:k
+        j = js[l]
+        if j ≤ 0 || j > M
+            continue
+        end
+        for i ∈ nzrows(A, j)
+            # If i ∉ is, then b[i] wasn't evaluated because x is not in its
+            # support.
+            # In other words, b[i](x) = 0, and we can skip this B-spline.
+            i ∈ is || continue
+            ϕs[l] += bs[i - δi] * A[i, j]
+        end
+    end
+
+    js, Tuple(ϕs)
+end
